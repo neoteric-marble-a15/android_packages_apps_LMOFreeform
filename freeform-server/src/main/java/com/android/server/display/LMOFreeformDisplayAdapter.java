@@ -21,7 +21,6 @@ import com.libremobileos.freeform.ILMOFreeformDisplayCallback;
 
 public class LMOFreeformDisplayAdapter extends DisplayAdapter {
     private static final String TAG = "LMOFreeform/LMOFreeformDisplayAdapter";
-    // Unique id prefix for freeform displays.
     public static final String UNIQUE_ID_PREFIX = "lmo-freeform:";
 
     private final ArrayMap<IBinder, FreeformDisplayDevice> mFreeformDisplayDevices =
@@ -58,9 +57,6 @@ public class LMOFreeformDisplayAdapter extends DisplayAdapter {
         super.registerLocked();
     }
 
-    /**
-     * Create a freeform DisplayDevice
-     */
     public void createFreeformLocked(String name, ILMOFreeformDisplayCallback callback,
                                      int width, int height, int densityDpi,
                                      boolean secure, boolean ownContentOnly, boolean shouldShowSystemDecorations,
@@ -68,7 +64,9 @@ public class LMOFreeformDisplayAdapter extends DisplayAdapter {
         synchronized (getSyncRoot()) {
             IBinder appToken = callback.asBinder();
             FreeformFlags flags = new FreeformFlags(secure, ownContentOnly, shouldShowSystemDecorations);
-            IBinder displayToken = DisplayControl.createVirtualDisplay(name, flags.mSecure, false /* optimizeForPower */, UNIQUE_ID_PREFIX + name, refreshRate);
+
+            IBinder displayToken = DisplayControl.createVirtualDisplay(name, flags.mSecure, UNIQUE_ID_PREFIX + name, refreshRate);
+
             FreeformDisplayDevice device = new FreeformDisplayDevice(displayToken, UNIQUE_ID_PREFIX + name, width, height, densityDpi,
                     refreshRate, presentationDeadlineNanos,
                     flags, surface, new Callback(callback, mHandler), callback.asBinder());
@@ -83,7 +81,6 @@ public class LMOFreeformDisplayAdapter extends DisplayAdapter {
                 try {
                     callback.onDisplayAdd(display.getDisplayIdLocked());
                 } catch (Exception ignored) {
-
                 }
             }, 500);
 
@@ -112,7 +109,6 @@ public class LMOFreeformDisplayAdapter extends DisplayAdapter {
             FreeformDisplayDevice device = mFreeformDisplayDevices.remove(appToken);
             if (device != null) {
                 lmoFreeformDisplayCallbackArrayMap.remove(device);
-
                 device.destroyLocked(true);
                 appToken.unlinkToDeath(device, 0);
                 sendDisplayDeviceEventLocked(device, DISPLAY_DEVICE_EVENT_REMOVED);
@@ -203,6 +199,12 @@ public class LMOFreeformDisplayAdapter extends DisplayAdapter {
         }
 
         @Override
+        public void performTraversalLocked(SurfaceControl.Transaction t) {
+            super.performTraversalLocked(t);
+            configureSurfaceLocked(t);
+            configureDisplaySizeLocked(t);
+        }
+
         public void configureSurfaceLocked(SurfaceControl.Transaction t) {
             if ((mPendingChanges & PENDING_SURFACE_CHANGE) != 0) {
                 setSurfaceLocked(t, mSurface);
@@ -210,7 +212,6 @@ public class LMOFreeformDisplayAdapter extends DisplayAdapter {
             }
         }
 
-        @Override
         public void configureDisplaySizeLocked(SurfaceControl.Transaction t) {
             if ((mPendingChanges & PENDING_RESIZE) != 0) {
                 t.setDisplaySize(getDisplayTokenLocked(), mWidth, mHeight);
@@ -244,8 +245,7 @@ public class LMOFreeformDisplayAdapter extends DisplayAdapter {
                 mInfo.xDpi = mDensityDpi;
                 mInfo.yDpi = mDensityDpi;
                 mInfo.presentationDeadlineNanos = mDisplayPresentationDeadlineNanos +
-                        1000000000L / (int) mRefreshRate;   // display's deadline + 1 frame
-                //mInfo.flags = DisplayDeviceInfo.FLAG_PRESENTATION;
+                        1000000000L / (int) mRefreshRate;
                 if (mFlags.mSecure) {
                     mInfo.flags |= DisplayDeviceInfo.FLAG_SECURE;
                 }
@@ -257,7 +257,6 @@ public class LMOFreeformDisplayAdapter extends DisplayAdapter {
                 }
                 mInfo.type = Display.TYPE_OVERLAY;
                 mInfo.touch = DisplayDeviceInfo.TOUCH_VIRTUAL;
-                // The display is trusted since it is created by system.
                 mInfo.flags |= FLAG_TRUSTED;
                 mInfo.displayShape = DisplayShape.createDefaultDisplayShape(mInfo.width, mInfo.height, false);
             }
@@ -265,18 +264,12 @@ public class LMOFreeformDisplayAdapter extends DisplayAdapter {
         }
     }
 
-    /** Represents the flags of the freeform display. */
     protected static final class FreeformFlags {
         final boolean mSecure;
-
         final boolean mOwnContentOnly;
-
         final boolean mShouldShowSystemDecorations;
 
-        FreeformFlags(
-                boolean secure,
-                boolean ownContentOnly,
-                boolean shouldShowSystemDecorations) {
+        FreeformFlags(boolean secure, boolean ownContentOnly, boolean shouldShowSystemDecorations) {
             mSecure = secure;
             mOwnContentOnly = ownContentOnly;
             mShouldShowSystemDecorations = shouldShowSystemDecorations;
@@ -293,7 +286,7 @@ public class LMOFreeformDisplayAdapter extends DisplayAdapter {
         }
     }
 
-    protected static class Callback extends Handler{
+    protected static class Callback extends Handler {
         private static final int MSG_ON_DISPLAY_PAUSED = 0;
         private static final int MSG_ON_DISPLAY_RESUMED = 1;
         private static final int MSG_ON_DISPLAY_STOPPED = 2;
